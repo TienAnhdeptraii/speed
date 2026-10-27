@@ -23,6 +23,12 @@ public class PlayerItem {
         this.obtainTime = obtainTime;
     }
 
+    public PlayerItem(Long playerId, int itemId, ItemCategory category, int quantity,
+                      int avaIPeriod, boolean status, int obtainTime) {
+        this(playerId, itemId, quantity, avaIPeriod, status, obtainTime);
+        this.category = category;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -33,6 +39,35 @@ public class PlayerItem {
     @Positive
     @Column(name = "item_id", nullable = false, updatable = false)
     private int itemId;
+
+    @Enumerated(EnumType.STRING)
+    // Nullable during rollout so existing inventory rows remain readable until backfilled.
+    @Column(name = "category", length = 20)
+    private ItemCategory category = ItemCategory.ITEM;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "vehicle_category", length = 20)
+    private ItemCategory.VehicleCategory vehicleCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "outfit_category", length = 30)
+    private ItemCategory.OutfitCategory outfitCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rune_category", length = 20)
+    private ItemCategory.RuneCategory runeCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "effect_category", length = 20)
+    private ItemCategory.EffectCategory effectCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "utility_category", length = 20)
+    private ItemCategory.UtilityCategory utilityCategory;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pet_category", length = 20)
+    private ItemCategory.PetCategory petCategory;
 
     @Positive
     @Column(nullable = false)

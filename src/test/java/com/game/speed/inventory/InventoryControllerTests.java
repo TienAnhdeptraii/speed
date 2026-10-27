@@ -41,10 +41,12 @@ class InventoryControllerTests {
     @Test
     void selectingCarUsesOwnershipRecordAndAuthenticatedUsername() throws Exception {
         when(inventory.selectCar("racer", 42L))
-                .thenReturn(new PlayerItemDTO(42L, 13703, 1, -1, true, 0, false, true));
+                .thenReturn(new PlayerItemDTO(42L, 13703, com.game.speed.inventory.entity.ItemCategory.VEHICLE,
+                        "S", 1, -1, true, 0, false, true));
         mvc.perform(put("/api/players/me/selected-car").with(user("racer"))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"playerItemId\":42}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.itemId").value(13703))
+                .andExpect(jsonPath("$.category").value("VEHICLE"))
                 .andExpect(jsonPath("$.avaIPeriod").value(-1))
                 .andExpect(jsonPath("$.status").value(true))
                 .andExpect(jsonPath("$.obtainTime").value(0))

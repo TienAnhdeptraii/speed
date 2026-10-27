@@ -1,6 +1,8 @@
 package com.game.speed.player.service;
 
 import com.game.speed.inventory.entity.PlayerItem;
+import com.game.speed.inventory.entity.ItemCategory;
+import com.game.speed.inventory.config.InventoryRules;
 import com.game.speed.inventory.repository.InventoryRepository;
 import com.game.speed.money.entity.Money;
 import com.game.speed.money.repository.MoneyRepository;
@@ -24,6 +26,7 @@ public class PlayerService {
     private final MoneyRepository moneyRepository;
     private final PasswordEncoder passwordEncoder;
     private final InventoryRepository inventoryRepository;
+    private final InventoryRules inventoryRules;
 
     @Transactional
     public Player createNewPlayer(CreatePlayerDTO request) {
@@ -46,7 +49,14 @@ public class PlayerService {
 
         Money wallet = new Money();
         wallet.setPlayerId(savedPlayer.getId());
-        PlayerItem invent = new PlayerItem(savedPlayer.getId(),13703,1,-1,true,0);
+        PlayerItem invent = new PlayerItem(savedPlayer.getId(),13703,ItemCategory.VEHICLE,1,-1,true,0);
+        var itemDefinition = inventoryRules.definitionFor(13703);
+        invent.setVehicleCategory(itemDefinition.vehicleCategory());
+        invent.setOutfitCategory(itemDefinition.outfitCategory());
+        invent.setRuneCategory(itemDefinition.runeCategory());
+        invent.setEffectCategory(itemDefinition.effectCategory());
+        invent.setUtilityCategory(itemDefinition.utilityCategory());
+        invent.setPetCategory(itemDefinition.petCategory());
         savedPlayer.setSelectedPlayerItemId(invent.getId());
         moneyRepository.save(wallet);
         inventoryRepository.save(invent);

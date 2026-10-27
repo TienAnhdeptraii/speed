@@ -16,10 +16,12 @@ public class PlayerDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         return playerRepository.findByUsername(username)
-                .map(player -> User.withUsername(player.getUsername())
-                        .password(player.getPassword())
-                        .roles("PLAYER")
-                        .build())
+                .map(player -> {
+                    var user = User.withUsername(player.getUsername()).password(player.getPassword());
+                    if (player.isAdmin()) user.roles("PLAYER", "ADMIN");
+                    else user.roles("PLAYER");
+                    return user.build();
+                })
                 .orElseThrow(() -> new UsernameNotFoundException("Player not found"));
     }
 }

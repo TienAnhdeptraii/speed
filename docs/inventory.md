@@ -15,7 +15,7 @@ from the inventory response, **not** the client item code.
 Example response:
 
 ```json
-{"id":42,"itemId":13703,"quantity":1,"avaIPeriod":-1,"status":true,"obtainTime":0,"expired":false,"selected":true}
+{"id":42,"itemId":13703,"category":"VEHICLE","subcategory":"S","quantity":1,"avaIPeriod":-1,"status":true,"obtainTime":0,"expired":false,"selected":true}
 ```
 
 `obtainTime` in API responses is the remaining duration in seconds. Following the entity's
@@ -24,6 +24,14 @@ and positive values mean timed. Timed items store an absolute `expiresAt` deadli
 their remaining seconds are calculated on each response, so offline time counts.
 At or after the deadline they are expired. Negative granted seconds are invalid. `status` is passed
 through unchanged; selection is still determined by `Player.selectedPlayerItemId`.
+New records require a category. Existing rows get a nullable `category` database
+column during rollout; API responses infer `VEHICLE` for configured car IDs and
+`ITEM` for other unclassified legacy rows. Vehicle subcategories are loaded from
+`items.json` and copied into newly granted records. The catalog supports
+`vehicleCategory`, `outfitCategory`, `runeCategory`, `effectCategory`,
+`utilityCategory`, and `petCategory`; each must match the item's main category.
+The inventory API returns the matching value as one `subcategory` field.
+Existing rows with null subtypes are resolved from that catalog in API responses.
 Reads do not update the database or restart the timer. No scheduler is needed.
 The database's `obtain_time` stores the original granted seconds for timed items;
 the API uses the deadline instead. Expired, depleted, or unrecognized cars cannot be selected.
@@ -46,11 +54,21 @@ controls whether an owned item can be equipped as a car; it does not grant cars.
 
 `InventoryService.grantItem(playerId, itemId, quantity, avaIPeriod, status, obtainTime)` is an internal
 entry point for future reward/purchase flows. There is no public grant endpoint.
-Every grant creates a new record, preserving separate durations. Timed grants
-require positive remaining seconds; permanent/quantity-based grants accept zero.
-Cars are
-granted individually. Other item quantities are stored without automatic merging;
-stacking/use rules will be added when those item types are implemented. Callers
+Quantity-based grants (`avaIPeriod=0`) merge into the oldest compatible ownership
+record, except for known car IDs. Compatibility means the same owner, itemId,
+status and obtainTime, with no expiration timestamp. Existing compatible duplicate
+rows are folded into that stack when the next grant arrives. Different statuses
+and quantity-based versus duration-based ownership remain separate.
+Timed/permanent ownership with the same owner, itemId and status merges into one
+record. Timed rewards extend the existing deadline (or start from now if expired).
+A permanent reward upgrades timed ownership; existing permanent ownership stays
+permanent for any further timed/permanent reward. Legacy remaining durations are
+combined, but any permanent duplicate takes precedence. The equipped ownership ID
+is preserved during consolidation. Missing legacy deadlines contribute no time.
+Timed/permanent grants require quantity 1; timed grants require positive seconds.
+The returned inventory DTO contains the total quantity or remaining duration.
+Grants lock the owner before looking up stacks, including the first grant when no
+stack exists, and reject totals exceeding Integer.MAX_VALUE with 409. Callers
 must handle reward/purchase idempotency in their transaction.
 
 Registration grants one permanent car (13703) through the existing PlayerService

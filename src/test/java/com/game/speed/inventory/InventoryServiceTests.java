@@ -37,6 +37,7 @@ class InventoryServiceTests {
         car.setId(42L);
         car.setPlayerId(7L);
         car.setItemId(13703);
+        car.setCategory(com.game.speed.inventory.entity.ItemCategory.VEHICLE);
         car.setAvaIPeriod(-1);
         when(players.findByUsername("racer")).thenReturn(Optional.of(player));
         when(players.findByUsernameForUpdate("racer")).thenReturn(Optional.of(player));
@@ -99,7 +100,7 @@ class InventoryServiceTests {
 
     @Test
     void grantsPreserveRemainingSecondsAndStatusWithoutAutoEquip() {
-        when(players.findById(7L)).thenReturn(Optional.of(player));
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
         when(items.save(any(PlayerItem.class))).thenAnswer(invocation -> {
             PlayerItem item = invocation.getArgument(0);
             item.setId(43L);
@@ -176,7 +177,7 @@ class InventoryServiceTests {
 
     @Test
     void grantPersistsAbsoluteDeadlineOnlyForTimedItems() {
-        when(players.findById(7L)).thenReturn(Optional.of(player));
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
         when(items.save(any(PlayerItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         service.grantItem(7L, 13703, 1, 1, true, 86400);
         service.grantItem(7L, 13703, 1, -1, true, 0);
@@ -194,5 +195,128 @@ class InventoryServiceTests {
         assertThrows(ResponseStatusException.class, () -> service.selectCar("racer", 42L));
         assertNull(car.getExpiresAt());
         verify(players, never()).save(any());
+    }
+
+    @Test
+    void quantityGrantMergesCompatibleLegacyStacksIntoOldestRecord() {
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
+        PlayerItem first = new PlayerItem(7L, 999, 10, 0, true, 0);
+        first.setId(50L);
+        PlayerItem second = new PlayerItem(7L, 999, 2, 0, true, 0);
+        second.setId(51L);
+        when(items.findStacksForUpdate(7L, 999, true, 0, com.game.speed.inventory.entity.ItemCategory.ITEM)).thenReturn(List.of(first, second));
+        when(items.save(first)).thenReturn(first);
+        var result = service.grantItem(7L, 999, 5, 0, true, 0);
+        assertEquals(50L, result.id());
+        assertEquals(17, result.quantity());
+        verify(items).deleteAll(List.of(second));
+        verify(items).save(first);
+    }
+
+    @Test
+    void firstQuantityGrantCreatesOneStack() {
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
+        when(items.save(any(PlayerItem.class))).thenAnswer(invocation -> {
+            PlayerItem item = invocation.getArgument(0);
+            item.setId(50L);
+            return item;
+        });
+        var result = service.grantItem(7L, 999, 5, 0, false, 0);
+        assertEquals(5, result.quantity());
+        verify(items).findStacksForUpdate(7L, 999, false, 0, com.game.speed.inventory.entity.ItemCategory.ITEM);
+        verify(items, never()).deleteAll(anyList());
+    }
+
+    @Test
+    void overflowDoesNotModifyOrDeleteStacks() {
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
+        PlayerItem stack = new PlayerItem(7L, 999, Integer.MAX_VALUE, 0, true, 0);
+        when(items.findStacksForUpdate(7L, 999, true, 0, com.game.speed.inventory.entity.ItemCategory.ITEM)).thenReturn(List.of(stack));
+        var error = assertThrows(ResponseStatusException.class,
+                () -> service.grantItem(7L, 999, 1, 0, true, 0));
+        assertEquals(409, error.getStatusCode().value());
+        assertEquals(Integer.MAX_VALUE, stack.getQuantity());
+        verify(items, never()).save(any());
+        verify(items, never()).deleteAll(anyList());
+    }
+
+    @Test
+    void carsEvenWithQuantityPeriodDoNotStack() {
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
+        when(items.save(any(PlayerItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        service.grantItem(7L, 13703, 1, 0, true, 0);
+        verify(items, never()).findStacksForUpdate(anyLong(), anyInt(), anyBoolean(), anyInt(), any());
+    }
+
+    private void existingDurationItem(int period, Instant deadline) {
+        car.setAvaIPeriod(period);
+        car.setExpiresAt(deadline);
+        car.setStatus(true);
+        when(players.findByIdForUpdate(7L)).thenReturn(Optional.of(player));
+        when(items.findDurationItemsForUpdate(7L, 13703, true, com.game.speed.inventory.entity.ItemCategory.VEHICLE)).thenReturn(List.of(car));
+        when(items.save(car)).thenReturn(car);
+    }
+
+    @Test
+    void threeDaysPlusSevenDaysKeepsOwnershipAndSelection() {
+        existingDurationItem(1, now.plusSeconds(3 * 86400));
+        player.setSelectedPlayerItemId(42L);
+        var result = service.grantItem(7L, 13703, 1, 1, true, 7 * 86400);
+        assertEquals(42L, result.id());
+        assertEquals(10 * 86400, result.obtainTime());
+        assertEquals(now.plusSeconds(10 * 86400), car.getExpiresAt());
+        assertEquals(1, result.quantity());
+        assertTrue(result.selected());
+    }
+
+    @Test
+    void expiredOwnershipStartsNewDurationFromNow() {
+        existingDurationItem(1, now.minusSeconds(86400));
+        var result = service.grantItem(7L, 13703, 1, 1, true, 7 * 86400);
+        assertEquals(7 * 86400, result.obtainTime());
+        assertEquals(now.plusSeconds(7 * 86400), car.getExpiresAt());
+    }
+
+    @Test
+    void permanentRewardUpgradesTimedOwnership() {
+        existingDurationItem(1, now.plusSeconds(86400));
+        var result = service.grantItem(7L, 13703, 1, -1, true, 0);
+        assertEquals(42L, result.id());
+        assertEquals(-1, result.avaIPeriod());
+        assertNull(car.getExpiresAt());
+        assertEquals(0, result.obtainTime());
+    }
+
+    @Test
+    void permanentOwnershipStaysPermanentForBothKindsOfRewards() {
+        existingDurationItem(-1, null);
+        assertEquals(-1, service.grantItem(7L, 13703, 1, 1, true, 604800).avaIPeriod());
+        assertEquals(-1, service.grantItem(7L, 13703, 1, -1, true, 0).avaIPeriod());
+        assertEquals(1, car.getQuantity());
+        assertNull(car.getExpiresAt());
+    }
+
+    @Test
+    void consolidatesDuplicatesWithoutDeletingSelectedCar() {
+        existingDurationItem(1, now.plusSeconds(86400));
+        PlayerItem other = new PlayerItem(7L, 13703, 1, -1, true, 0);
+        other.setId(41L);
+        when(items.findDurationItemsForUpdate(7L, 13703, true, com.game.speed.inventory.entity.ItemCategory.VEHICLE)).thenReturn(List.of(other, car));
+        player.setSelectedPlayerItemId(42L);
+        var result = service.grantItem(7L, 13703, 1, 1, true, 604800);
+        assertEquals(42L, result.id());
+        assertEquals(-1, result.avaIPeriod());
+        assertTrue(result.selected());
+        verify(items).deleteAll(List.of(other));
+    }
+
+    @Test
+    void durationOverflowLeavesOwnershipUnchanged() {
+        Instant deadline = now.plusSeconds(Integer.MAX_VALUE);
+        existingDurationItem(1, deadline);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.grantItem(7L, 13703, 1, 1, true, 1)).getStatusCode().value());
+        assertEquals(deadline, car.getExpiresAt());
+        verify(items, never()).save(any());
     }
 }

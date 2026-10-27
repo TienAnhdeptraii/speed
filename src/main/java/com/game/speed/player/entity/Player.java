@@ -1,14 +1,14 @@
-    package com.game.speed.player.entity;
+package com.game.speed.player.entity;
 
-    import jakarta.persistence.*;
-    import lombok.Getter;
-    import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
-    @Entity
-    @Table(name = "player")
-    @Getter
-    @Setter
-    public class Player {
+@Entity
+@Table(name = "player")
+@Getter
+@Setter
+public class Player {
         @Column(name = "selected_player_item_id")
         private Long selectedPlayerItemId;
 
@@ -30,6 +30,9 @@
 
         @Column(name = "is_vip")
         private boolean isVip = false; // Trạng thái VIP (true/false)
+
+    @Column(name = "is_admin")
+    private boolean isAdmin = false;
 
         @Column(name = "is_online")
         private boolean isOnline = false; // Trạng thái đang online/offline
