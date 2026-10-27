@@ -1,0 +1,11 @@
+{
+  "boxes": {
+    "18247": [
+      { "itemId": 13703,  "quantity": 1, "avaIPeriod": -1, "status": true, "obtainTime": 0, "weight": 20 },
+      { "itemId": 21901,  "quantity": 1, "avaIPeriod": -1, "status": true, "obtainTime": 0, "weight": 20 },
+      { "itemId": 12720,  "quantity": 1, "avaIPeriod": -1, "status": true, "obtainTime": 0, "weight": 20 },
+      { "itemId": 26931,  "quantity": 1, "avaIPeriod": -1, "status": true, "obtainTime": 0, "weight": 20 },
+      { "itemId": 24859,  "quantity": 1, "avaIPeriod": -1, "status": true, "obtainTime": 0, "weight": 20 }
+    ]
+  }
+}
