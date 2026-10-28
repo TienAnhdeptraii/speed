@@ -2,6 +2,11 @@
 
 Authenticated admins can grant an item to a player's inventory:
 
+`GET /api/admin/items` lists all IDs configured in `items.json` or inventory
+properties, with their category and optional subcategory. This is useful for
+selecting an item in an admin form. IDs absent from the catalog can still be
+granted and are classified as `ITEM` by the current inventory rules.
+
 ```http
 POST /api/admin/players/123/inventory
 Authorization: Bearer <admin-token>

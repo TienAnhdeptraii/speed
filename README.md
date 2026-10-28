@@ -1,6 +1,6 @@
 # Speed backend
 
-Spring Boot REST backend for a ZingSpeed/QQSpeed-inspired game. It currently supports player accounts, JWT authentication, a wallet, inventory, cars, and prize boxes. Direct communication with the QQSpeed client over its game protocol is not implemented.
+Spring Boot backend for a ZingSpeed/QQSpeed-inspired game. It currently supports player accounts, JWT authentication, a wallet, inventory, cars, prize boxes, and live global chat. Direct communication with the QQSpeed client over its game protocol is not implemented.
 
 ## Requirements
 
@@ -53,14 +53,19 @@ Only registration and login are public. Send `Authorization: Bearer <accessToken
 | `GET` | `/api/players/me/selected-car` | Read your selected car |
 | `PUT` | `/api/players/me/selected-car` | Select a car using `{ "playerItemId": 42 }` |
 | `POST` | `/api/players/me/boxes/open` | Open one owned box |
+| `GET` | `/api/admin/items` | List configured item IDs and categories |
+| `GET` | `/api/admin/boxes` | List boxes and reward tables from JSON and MySQL |
 | `POST` | `/api/admin/players/{playerId}/inventory` | Grant an item to a player's inventory |
 | `POST` | `/api/admin/boxes` | Create a box definition and its reward table |
+| `PUT` | `/api/admin/boxes/{itemId}` | Replace a box's reward table |
 
 Register with `{ "username": "player1", "password": "secret", "confirmpassword": "secret" }`, then log in with `{ "username": "player1", "password": "secret" }`. The login response contains `accessToken`.
 
 ### Inventory and item IDs
 
 Items are classified by their client `itemId`, using [`items.json`](src/main/resources/items.json). A definition can include a category and one matching subcategory, such as `VEHICLE` with `vehicleCategory: "S"`. IDs not configured there or in the inventory properties default to `ITEM`. Add new item definitions to the catalog file and restart the server to load them.
+
+`GET /api/admin/items` returns configured IDs as `{ "itemId": 13703, "category": "VEHICLE", "subcategory": "S" }`. An ID that has never been configured is absent from this list, even though inventory grants currently classify it as `ITEM`.
 
 For inventory grants and box rewards, `avaIPeriod` means:
 
@@ -94,6 +99,10 @@ Content-Type: application/json
 
 The server stores boxes created through this API in MySQL. `weight` is relative: in the example, the rewards have 70% and 30% chances. [`boxes.json`](src/main/resources/boxes.json) defines the initial box `18247`; a new box ID must not duplicate an existing one.
 
+`GET /api/admin/boxes` returns both JSON-configured boxes and boxes created through the admin API, including every reward entry.
+
+Run `app-desktop/run-box-admin.cmd` for the desktop box editor. Sign in with an admin account, then create a box or select an existing one to change its rewards and weights. The app shows each reward's calculated chance. Editing the box from `boxes.json` saves a database override; its JSON entry remains as the original configuration. The box ID cannot be changed during an edit.
+
 Creating a box defines its rewards but does not put the box in a player's inventory. Grant it through `POST /api/admin/players/{playerId}/inventory`:
 
 ```json
@@ -118,8 +127,15 @@ UPDATE player SET is_admin = TRUE WHERE username = 'your-admin-account';
 
 Roles are loaded from the database on each authenticated request. See [admin inventory grants](docs/admin-inventory.md) for request details.
 
+### Live chat
+
+The WebSocket endpoint is `/ws`. Connect with a JWT in the STOMP `Authorization: Bearer <accessToken>` header, subscribe to `/topic/chat`, and send `{ "content": "Hello" }` to `/app/chat/send`. Invalid message content is returned to `/user/queue/errors`. The allowed FE origin is controlled by `CHAT_ALLOWED_ORIGIN` (default `http://localhost:5173`). Messages are broadcast live and are not stored yet. See the [chat guide](docs/chat-websocket.md) for code and a FE example.
+
 ## More details
 
 - [Inventory behavior and item categories](docs/inventory.md)
 - [Box opening and reward configuration](docs/boxes.md)
 - [Admin inventory grants](docs/admin-inventory.md)
+- [WebSocket chat implementation guide](docs/chat-websocket.md)
+- [Desktop app to try the chat](app-desktop/README.md)
+- [Desktop app to manage boxes](app-desktop/BOX-ADMIN.md)

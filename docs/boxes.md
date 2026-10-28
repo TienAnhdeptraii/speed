@@ -59,6 +59,21 @@ opened immediately, including after a restart. The box item is not granted to
 any player by creation; use the admin inventory grant API for that. Box IDs
 already present in `boxes.json` cannot be created again.
 
+`GET /api/admin/boxes` lists the box definitions and their reward tables from
+both the startup JSON file and the database, ordered by box item ID. It also
+requires an admin JWT.
+
+`PUT /api/admin/boxes/{itemId}` replaces the full reward table. Send the same
+JSON shape as `POST`, with `itemId` matching the URL. The box ID cannot be
+changed. Updating a box from `boxes.json` creates a database override, so the
+new table takes effect without editing the source file. The original JSON
+remains in place; later edits replace the override.
+
+The Swing app at `app-desktop/BoxAdminDesktopApp.java` provides a form for
+creating and editing boxes. Run `app-desktop/run-box-admin.cmd` on Windows. It
+shows the calculated probability for each reward based on its weight. Sign in
+there with an admin account.
+
 Box **18247** is enabled in `src/main/resources/boxes.json` under `boxes.18247`.
 It grants one permanent car: 13703, 21901, 12720, 26931 or 24859, each with
 weight 20 (20% probability). Each reward is categorized as `VEHICLE`, with quantity 1, period -1, status true

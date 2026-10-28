@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 @Service
 @RequiredArgsConstructor
@@ -26,11 +28,42 @@ public class BoxCatalogService {
 
     @Transactional
     public BoxDefinitionDTO create(CreateBoxRequest request) {
-        if (request.itemId() <= 0 || request.rewards() == null || request.rewards().isEmpty()) {
-            throw new IllegalArgumentException("Box ID and rewards are required");
-        }
+        List<Reward> rewards = validatedRewards(request);
         if (configuredBoxes.getRewards().containsKey(request.itemId()) || definitions.existsById(request.itemId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Box ID already exists");
+        }
+        BoxDefinition definition = new BoxDefinition(request.itemId(),
+                rewards.stream().map(BoxRewardEntry::new).toList());
+        try {
+            definitions.saveAndFlush(definition);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Box ID already exists", exception);
+        }
+        return new BoxDefinitionDTO(request.itemId(), List.copyOf(rewards));
+    }
+
+    @Transactional
+    public BoxDefinitionDTO update(int itemId, CreateBoxRequest request) {
+        if (itemId <= 0 || request.itemId() != itemId) {
+            throw new IllegalArgumentException("Box ID must match the URL and cannot be changed");
+        }
+        List<Reward> rewards = validatedRewards(request);
+        BoxDefinition definition = definitions.findById(itemId).orElse(null);
+        if (definition == null) {
+            if (!configuredBoxes.getRewards().containsKey(itemId)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Box not found");
+            }
+            // An edit to a JSON box is stored as a database override.
+            definition = new BoxDefinition(itemId, List.of());
+        }
+        definition.replaceRewards(rewards.stream().map(BoxRewardEntry::new).toList());
+        definitions.saveAndFlush(definition);
+        return new BoxDefinitionDTO(itemId, List.copyOf(rewards));
+    }
+
+    private List<Reward> validatedRewards(CreateBoxRequest request) {
+        if (request.itemId() <= 0 || request.rewards() == null || request.rewards().isEmpty()) {
+            throw new IllegalArgumentException("Box ID and rewards are required");
         }
         List<Reward> rewards = request.rewards().stream().map(reward -> {
             if (reward == null || reward.itemId() == null || reward.quantity() == null
@@ -49,14 +82,7 @@ public class BoxCatalogService {
                 throw new IllegalArgumentException("Invalid box reward");
             }
         }
-        BoxDefinition definition = new BoxDefinition(request.itemId(),
-                rewards.stream().map(BoxRewardEntry::new).toList());
-        try {
-            definitions.saveAndFlush(definition);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Box ID already exists", exception);
-        }
-        return new BoxDefinitionDTO(request.itemId(), List.copyOf(rewards));
+        return rewards;
     }
 
     @Transactional(readOnly = true)
@@ -65,5 +91,16 @@ public class BoxCatalogService {
                 .map(definition -> definition.getRewards().stream()
                         .map(BoxRewardEntry::toReward).toList())
                 .orElseGet(() -> configuredBoxes.getRewards().get(boxItemId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<BoxDefinitionDTO> list() {
+        Map<Integer, BoxDefinitionDTO> boxes = new TreeMap<>();
+        configuredBoxes.getRewards().forEach((itemId, rewards) ->
+                boxes.put(itemId, new BoxDefinitionDTO(itemId, List.copyOf(rewards))));
+        definitions.findAll().forEach(definition ->
+                boxes.put(definition.getItemId(), new BoxDefinitionDTO(definition.getItemId(),
+                        definition.getRewards().stream().map(BoxRewardEntry::toReward).toList())));
+        return List.copyOf(boxes.values());
     }
 }

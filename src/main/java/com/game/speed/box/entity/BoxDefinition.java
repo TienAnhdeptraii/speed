@@ -33,4 +33,9 @@ public class BoxDefinition {
         this.itemId = itemId;
         this.rewards.addAll(rewards);
     }
+
+    public void replaceRewards(List<BoxRewardEntry> rewards) {
+        this.rewards.clear();
+        this.rewards.addAll(rewards);
+    }
 }
